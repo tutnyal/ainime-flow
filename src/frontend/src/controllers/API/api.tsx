@@ -1,4 +1,4 @@
-import { IS_AUTO_LOGIN, LANGFLOW_ACCESS_TOKEN } from "@/constants/constants";
+import { BASE_URL_API, LANGFLOW_ACCESS_TOKEN } from "@/constants/constants";
 import { useCustomApiHeaders } from "@/customization/hooks/use-custom-api-headers";
 import useAuthStore from "@/stores/authStore";
 import { useUtilityStore } from "@/stores/utilityStore";
@@ -11,13 +11,55 @@ import useAlertStore from "../../stores/alertStore";
 import useFlowStore from "../../stores/flowStore";
 import { checkDuplicateRequestAndStoreRequest } from "./helpers/check-duplicate-requests";
 import { useLogout, useRefreshAccessToken } from "./queries/auth";
+import { getBaseURL, URLs } from "./helpers/constants";
 
 // Create a new Axios instance
 const api: AxiosInstance = axios.create({
   baseURL: "",
 });
 
+// const BACKEND_URL = import.meta.env.VITE_PROXY_TARGET || 
+//                    "https://comfydeploy-osv-delicate-resonance-8920.fly.dev";
+
+// // Create a new Axios instance
+// const api: AxiosInstance = axios.create({
+//   baseURL: BACKEND_URL,
+// });
+
+// const api = axios.create({
+//   baseURL: getBaseURL(),
+//   timeout: 30000,
+//   headers: {
+//     "Content-Type": "application/json",
+//   },
+// });
+
 const cookies = new Cookies();
+
+// Function to check if a URL is for Digital Ocean Spaces
+function isDigitalOceanURL(url: string | undefined): boolean {
+  if (!url) return false;
+  return url.includes('digitaloceanspaces.com');
+}
+
+// Function to check if a URL requires authorization
+function isAuthorizedURL(url: string | undefined): boolean {
+  if (!url) return false;
+  // Skip authorization for Digital Ocean URLs
+  if (isDigitalOceanURL(url)) return true;
+  
+  // Add other URLs that don't need authorization here
+  const unauthorizedURLs = [
+    '/health',
+    '/login',
+    '/register',
+    '/api/v1/login',
+    '/api/v1/register',
+  ];
+  
+  return unauthorizedURLs.some(endpoint => url.includes(endpoint));
+}
+
 function ApiInterceptor() {
   const autoLogin = useAuthStore((state) => state.autoLogin);
   const setErrorData = useAlertStore((state) => state.setErrorData);
@@ -41,17 +83,19 @@ function ApiInterceptor() {
   useEffect(() => {
     const unregister = fetchIntercept.register({
       request: function (url, config) {
+        // Skip adding headers for Digital Ocean URLs
+        if (isDigitalOceanURL(url)) {
+          return [url, config];
+        }
+        
         const accessToken = cookies.get(LANGFLOW_ACCESS_TOKEN);
         if (accessToken && !isAuthorizedURL(config?.url)) {
           config.headers["Authorization"] = `Bearer ${accessToken}`;
         }
 
-        if (!isExternalURL(url)) {
-          for (const [key, value] of Object.entries(customHeaders)) {
-            config.headers[key] = value;
-          }
+        for (const [key, value] of Object.entries(customHeaders)) {
+          config.headers[key] = value;
         }
-
         return [url, config];
       },
     });
@@ -65,27 +109,22 @@ function ApiInterceptor() {
         const isAuthenticationError =
           error?.response?.status === 403 || error?.response?.status === 401;
 
-        const shouldRetryRefresh =
-          (isAuthenticationError && !IS_AUTO_LOGIN) ||
-          (isAuthenticationError && !autoLogin && autoLogin !== undefined);
+        if (isAuthenticationError) {
+          if (autoLogin !== undefined && !autoLogin) {
+            if (error?.config?.url?.includes("github")) {
+              return Promise.reject(error);
+            }
+            const stillRefresh = checkErrorCount();
+            if (!stillRefresh) {
+              return Promise.reject(error);
+            }
 
-        if (shouldRetryRefresh) {
-          if (
-            error?.config?.url?.includes("github") ||
-            error?.config?.url?.includes("public")
-          ) {
-            return Promise.reject(error);
-          }
-          const stillRefresh = checkErrorCount();
-          if (!stillRefresh) {
-            return Promise.reject(error);
-          }
+            await tryToRenewAccessToken(error);
 
-          await tryToRenewAccessToken(error);
-
-          const accessToken = cookies.get(LANGFLOW_ACCESS_TOKEN);
-          if (!accessToken && error?.config?.url?.includes("login")) {
-            return Promise.reject(error);
+            const accessToken = cookies.get(LANGFLOW_ACCESS_TOKEN);
+            if (!accessToken && error?.config?.url?.includes("login")) {
+              return Promise.reject(error);
+            }
           }
         }
 
@@ -96,49 +135,6 @@ function ApiInterceptor() {
         }
       },
     );
-
-    const isAuthorizedURL = (url) => {
-      const authorizedDomains = [
-        "https://raw.githubusercontent.com/langflow-ai/langflow_examples/main/examples",
-        "https://api.github.com/repos/langflow-ai/langflow_examples/contents/examples",
-        "https://api.github.com/repos/langflow-ai/langflow",
-        "auto_login",
-      ];
-
-      const authorizedEndpoints = ["auto_login"];
-
-      try {
-        const parsedURL = new URL(url);
-        const isDomainAllowed = authorizedDomains.some(
-          (domain) => parsedURL.origin === new URL(domain).origin,
-        );
-        const isEndpointAllowed = authorizedEndpoints.some((endpoint) =>
-          parsedURL.pathname.includes(endpoint),
-        );
-
-        return isDomainAllowed || isEndpointAllowed;
-      } catch (e) {
-        // Invalid URL
-        return false;
-      }
-    };
-
-    // Check for external url which we don't want to add custom headers to
-    const isExternalURL = (url: string): boolean => {
-      const EXTERNAL_DOMAINS = [
-        "https://raw.githubusercontent.com",
-        "https://api.github.com",
-        "https://api.segment.io",
-        "https://cdn.sprig.com",
-      ];
-
-      try {
-        const parsedURL = new URL(url);
-        return EXTERNAL_DOMAINS.some((domain) => parsedURL.origin === domain);
-      } catch (e) {
-        return false;
-      }
-    };
 
     // Request interceptor to add access token to every request
     const requestInterceptor = api.interceptors.request.use(

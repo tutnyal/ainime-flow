@@ -23,6 +23,7 @@ export const URLs = {
   CONFIG: `config`,
   STARTER_PROJECTS: `starter-projects`,
   SIDEBAR_CATEGORIES: `sidebar_categories`,
+  API_BASE_URL: "https://comfydeploy-osv-delicate-resonance-8920.fly.dev",
   ALL: `all`,
   VOICE: `voice`,
   PUBLIC_FLOW: `/flows/public_flow`,
@@ -37,5 +38,10 @@ export function getURL(
   Object.keys(params).forEach((key) => (url += `/${params[key]}`));
   return `${v2 ? BASE_URL_API_V2 : BASE_URL_API}${url.toString()}`;
 }
+
+// Get the base URL from environment variables or use a default
+export const getBaseURL = () => {
+  return import.meta.env.VITE_API_BASE_URL || import.meta.env.PROXY_TARGET || "";
+};
 
 export type URLsType = typeof URLs;
