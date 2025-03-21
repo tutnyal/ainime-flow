@@ -1,0 +1,29 @@
+curl --request POST \
+  --url http://localhost:3000/api/run \
+  --header "Content-Type: application/json" \
+  --header "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidXNlcl8yam1VRFI4c3ZwbUU0UkRCMDRLT2ZwbTVUWTMiLCJpYXQiOjE3NDAwNzExMTF9.-HYVZJSekJQXQ3o6XPUL9dJIfK87IoTWNFm-ZmPe3zE" \
+  --data '{
+    "deployment_id": "a702ea91-9b42-4b2d-ac32-969d654c39af",
+    "inputs": {
+      "input_text": "Hello, world!",
+      "input_image": ""
+    }
+}'
+# --url "http://localhost:3000/api/run?run_id=c50c795d-3b6e-4258-a236-548fed05de01"   --header "Content-Type: application/json"
+
+# curl --request GET   --url "http://localhost:3000/api/run?run_id=c50c795d-3b6e-4258-a236-548fed05de01"   --header "Content-Type: application/json"
+
+
+# curl -X OPTIONS http://localhost:3000/api/run \
+#   -H "Origin: http://localhost:7860" \
+#   -H "Access-Control-Request-Method: POST" \
+#   -v
+
+
+# curl -L 'http://localhost:7860/api/v1/users/' \
+# -H 'Content-Type: application/json' \
+# -H 'Accept: application/json' \
+# -d '{
+#   "username": "admin",
+#   "password": "admin"
+# }'
